@@ -30,6 +30,7 @@
     # library(magrittr)
     # library(readxl)
     # library(testthat)
+    # library(glue)
 
 # COMMENT OUT ABOVE CODE WHEN RUNNING IN SHINY!
 
@@ -137,6 +138,7 @@ df.wq$EDEP_Confirm <- as.character(df.wq$EDEP_Confirm)
 df.wq$EDEP_MW_Confirm <- as.character(df.wq$EDEP_Confirm)
 df.wq$Comment <- as.character(df.wq$Comment)
 df.wq$ResultReported <- as.character(df.wq$ResultReported)
+df.wq$SampleGroup <- as.character(df.wq$SampleGroup)
 
 if(all(!is.na(df.wq$LabRecDateET))) {
   df.wq$LabRecDateET <- as.POSIXct(paste(df.wq$LabRecDateET, format = "%Y-%m-%d %H:%M:SS", tz = "America/New_York", usetz = T))
@@ -239,6 +241,19 @@ edits <- str_detect(df.wq$ResultReported, paste(c("<",">"), collapse = '|')) %>%
 update <- as.numeric(df.wq$ResultReported[-edits], digits = 6)
 df.wq$ResultReported[-edits] <- as.character(update)
 
+# Add new column for censored data
+df.wq <- df.wq %>%
+  mutate("IsCensored" = NA_integer_)
+
+df.wq$IsCensored <- as.logical(df.wq$IsCensored)
+
+if(length(edits) == 0) {
+  df.wq$IsCensored <- FALSE
+} else {
+  df.wq$IsCensored[edits] <- TRUE
+  df.wq$IsCensored[-edits] <- FALSE
+}
+
 ### FinalResult (numeric)
 # Make the variable
 df.wq$FinalResult <- NA
@@ -247,13 +262,14 @@ x <- df.wq$ResultReported
 # Function to determine FinalResult
 FR <- function(x) {
   if(str_detect(x, "<")){# BDL
-    as.numeric(gsub("<","", x), digits =4) * 0.5 # THEN strip "<" from reported result, make numeric, divide by 2.
+    as.numeric(gsub("<","", x), digits =4)  # THEN strip "<" from reported result, make numeric
   } else if (str_detect(x, ">")){
       as.numeric(gsub(">","", x)) # THEN strip ">" form reported result, make numeric.
     } else {
       as.numeric(x)
     }# ELSE THEN just use Result Reported for Result and make numeric
-  }
+}
+
 df.wq$FinalResult <- mapply(FR,x) %>%
   round(digits = 4)
 
@@ -280,30 +296,43 @@ df.wq$ImportDate <- Sys.Date() %>% force_tz("America/New_York")
 ########################################################################.
 ###                      REMOVE ANY PRELIMINARY DATA                ####
 ########################################################################.
+### Get Locations table to generate list of applicable locations
+locations <- dbReadTable(con,  Id(schema = schema, table = "tblWatershedLocations"))
+
+### Filter down to only locations with preliminary bacteria (Primary/secondary Tribs and Transect)
+prelim_locs <- locations %>% 
+  filter(LocationType %in% c("Tributary", "Transect"),
+         LocationCategory != "Long-term Forestry") %>% 
+  pull(LocationMWRA)
 
 # Calculate the date range of import ####
 datemin <- min(df.wq$DateTimeET)
 datemax <- max(df.wq$DateTimeET)
 
-# IDs to look for - all records in time peroid in question
-qry <- glue("SELECT (ID) FROM [{schema}].[{ImportTable}] WHERE [DateTimeET] >= '{datemin}' AND [DateTimeET] <= '{datemax}'")
+# IDs to look for - all records in time period in question
+qry <- glue("SELECT [ID],[Location] FROM [{schema}].[{ImportTable}] WHERE [DateTimeET] >= '{datemin}' AND [DateTimeET] <= '{datemax}'")
 query.prelim <- dbGetQuery(con, qry) # This generates a list of possible IDs
 
-if (nrow(query.prelim) > 0) {# If true there is at least one record in the time range of the data
-  # SQL query that finds matching sample ID from tblSampleFlagIndex Flagged 102 within date range in question
-  qryS <- glue("SELECT [SampleID] FROM [{schema}].[{ImportFlagTable}] WHERE [FlagCode] = 102 AND [SampleID] IN ({paste0(query.prelim$ID, collapse = ",")})")
-  qryDelete <- dbGetQuery(con,qryS) # Check the query to see if it returns any matches
+query.prelim <- query.prelim %>% 
+  filter(Location %in% prelim_locs) %>% 
+  pull(ID)
+
+if (length(query.prelim) > 0) {# If true there is at least one record in the time range of the data
+  # SQL query that finds matching record ID from tblSampleFlagIndex Flagged 102 within date range in question
+  qryS <- sprintf("SELECT [SampleID] FROM [Wachusett].[tblTribFlagIndex] WHERE [FlagCode] = 102 AND [SampleID] IN (%s)", paste(as.character(query.prelim), collapse=', '))
+  qryDelete <- dbGetQuery(con, qryS) # Check the query to see if it returns any matches
+  
   # If there are matching records then delete preliminary data (IDs flagged 102 in period of question)
   if(nrow(qryDelete) > 0) {
-    qryDeletePrelimData <- glue("DELETE * FROM [{schema}].[{ImportTable}] WHERE [ID] IN ({paste0(qryDelete$SampleID, collapse = ",")})")
-    rs <- dbSendStatement(con,qryDeletePrelimData)
-    print(paste(dbGetRowsAffected(rs), "preliminary records were deleted during this import", sep = " ")) # Need to display this message to the Shiny UI
-    dbClearResult(rs)
-
-# Next delete all flags associated with preliminary data - Will also delete any other flag associated with record number
-    qryDeletePrelimFlags <- glue("DELETE * FROM [{schema}].[{ImportFlagTable}] WHERE [SampleID] IN ({paste0(qryDelete$SampleID, collapse = ",")})")
+    ### Delete from flag table
+    qryDeletePrelimFlags <- sprintf(glue("DELETE FROM [{schema}].[{ImportFlagTable}] WHERE [DataTableName] = 'tblMWRAResults' AND [SampleID] IN (%s)"), paste(as.character(query.prelim$ID), collapse=', '))
     rs <- dbSendStatement(con, qryDeletePrelimFlags)
     print(paste(dbGetRowsAffected(rs), "preliminary record data flags were deleted during this import", sep = " "))
+    dbClearResult(rs)
+    ### Delete from tblMWRAResults
+    qryDeletePrelimData <- sprintf(glue("DELETE FROM [{schema}].[{ImportTable}] WHERE [ID] IN (%s)"), paste(as.character(query.prelim), collapse=', '))
+    rs <- dbSendStatement(con,qryDeletePrelimData)
+    print(paste(dbGetRowsAffected(rs), "preliminary records were deleted during this import", sep = " ")) # Need to display this message to the Shiny UI
     dbClearResult(rs)
   }
 }

@@ -170,6 +170,17 @@ edits <- str_detect(df.wq$ResultReported, paste(c("<",">"), collapse = '|')) %>%
 update <- as.numeric(df.wq$ResultReported[-edits], digits = 6)
 df.wq$ResultReported[-edits] <- as.character(update)
 
+# Add new column for censored data
+df.wq <- df.wq %>%
+  mutate("IsCensored" = NA_integer_)
+
+if(length(edits) == 0) {
+  df.wq$IsCensored <- FALSE
+} else {
+  df.wq$IsCensored[edits] <- TRUE
+  df.wq$IsCensored[-edits] <- FALSE
+}
+
 ### FinalResult (numeric) ####
 # Make the variable
 df.wq$FinalResult <- NA
@@ -178,7 +189,7 @@ x <- df.wq$ResultReported
 # Function to determine FinalResult
 FR <- function(x) {
   if(str_detect(x, "<")){# BDL
-    as.numeric(gsub("<","", x), digits =4) * 0.5 # THEN strip "<" from reported result, make numeric, divide by 2.
+    as.numeric(gsub("<","", x), digits =4) # THEN strip "<" from reported result, make numeric.
   } else if (str_detect(x, ">")){
     as.numeric(gsub(">","", x)) # THEN strip ">" form reported result, make numeric.
   } else {

@@ -2,7 +2,7 @@
 #  TITLE: ImportProfiles.R
 #  DESCRIPTION: This script will process/import reservoir Profile Data to database
 #  AUTHOR(S): Dan Crocker, Max Nyquist
-#  DATE LAST UPDATED: 2021-02-23
+#  DATE LAST UPDATED: 2021-03-31
 #  GIT REPO: 
 #  R version 3.6.0 (2019-04-26)  i386
 ##############################################################################.
@@ -110,10 +110,11 @@ df.wq$Result <- round(as.numeric(df.wq$Result), 3)
 df.wq$DEP <- round(as.numeric(df.wq$DEP),3)
 
 # Connect to database
+dsn <- filename.db
 database <- "DCR_DWSP"
 schema <- "Wachusett"
 tz <- 'UTC'
-con <- dbConnect(odbc::odbc(), database, timezone = tz)
+con <- dbConnect(odbc::odbc(), dsn = dsn, uid = dsn, pwd = config[35], timezone = tz)
 
 probes <- dbReadTable(con, Id(schema = schema, table = "tbl_Equipment"))
 df_param <- dbReadTable(con, Id(schema = schema, table = "tblParameters"))
@@ -195,9 +196,9 @@ names(df.wq) <- cnames
 df.wq$ID <- as.integer(df.wq$ID)
 df.wq$DataSourceID <- as.integer(df.wq$DataSourceID)
 
-# Change time to UTC in DateTimeET
-df.wq$DateTimeET <- format(df.wq$DateTimeET, tz = "America/New_York", usetz = TRUE) %>%
-  lubridate::as_datetime()
+# # Change time to UTC in DateTimeET NOT NECESSARY FOR PROFILES
+# df.wq$DateTimeET <- format(df.wq$DateTimeET, tz = "America/New_York", usetz = TRUE) %>%
+#   lubridate::as_datetime()
 
 # Create a list of the processed datasets
 dfs <- list()
@@ -211,13 +212,12 @@ rm(con)
 return(dfs)
 } # END FUNCTION
 
-# dfs <- PROCESS_DATA(file, rawdatafolder, filename.db, probe, ImportTable = ImportTable, ImportFlagTable = NULL )
-
-# Extract each element needed
+# dfs <- PROCESS_DATA(file, rawdatafolder, filename.db, probe, ImportTable = ImportTable, ImportFlagTable = ImportFlagTable)
+# 
+# # Extract each element needed
 # df.wq     <- dfs[[1]]
 # path      <- dfs[[2]]
 # df.flags  <- dfs[[3]]
-
 ########################################################################.
 ###                       Write Data to Database                    ####
 ########################################################################.
@@ -242,9 +242,13 @@ IMPORT_DATA <- function(df.wq, df.flags = NULL, path, file, filename.db, process
   # df.flags is an optional argument  - not used for this dataset
 
   # Establish db connection
-  con <-  dbConnect(odbc::odbc(), database, timezone = tz)
-  # Get Import Table Columns
-  ColumnsOfTable <- dbListFields(con, schema_name = schema, ImportTable)
+  dsn <- filename.db
+  database <- "DCR_DWSP"
+  schema <- 'Wachusett'
+  tz <- 'America/New_York'
+  
+  con <- dbConnect(odbc::odbc(), dsn = dsn, uid = dsn, pwd = config[35], timezone = tz)  # Get Import Table Columns
+  ColumnsOfTable <- dbListFields(con, schema = schema, ImportTable)
 
   # # Set variable types
   # varTypes  <- as.character(ColumnsOfTable$TYPE_NAME)
@@ -273,5 +277,5 @@ IMPORT_DATA <- function(df.wq, df.flags = NULL, path, file, filename.db, process
 }
 ### END
 
-IMPORT_DATA(df.wq, df.flags = NULL, path, file, filename.db, processedfolder = NULL,
-            ImportTable = ImportTable, ImportFlagTable = NULL)
+# IMPORT_DATA(df.wq, df.flags = NULL, path, file, filename.db, processedfolder = NULL,
+#             ImportTable = ImportTable, ImportFlagTable = NULL)
