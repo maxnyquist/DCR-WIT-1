@@ -21,44 +21,75 @@ library(DescTools)
 library(devtools)
 library(tidyr)
 
-###  
-# Specify Library path and Load libraries needed in this script only
-.libPaths(config[["R_lib_Path"]])
-
-ipak <- function(pkg){
-  new.pkg <- pkg[!(pkg %in% installed.packages(lib.loc = config[["R_lib_Path"]])[, "Package"])]
-  if (length(new.pkg))
-    install.packages(new.pkg, lib = config[["R_lib_Path"]], dependencies = TRUE, repos="http://cran.rstudio.com/")
-  sapply(pkg, require, character.only = TRUE)
-}
-
-# usage
-packages <- c("httpuv", "shiny")
-ipak(packages)
-
-
-
-
-
-
-
+# ###  
+# # Specify Library path and Load libraries needed in this script only
+# .libPaths(config[["R_lib_Path"]])
+# 
+# ipak <- function(pkg){
+#   new.pkg <- pkg[!(pkg %in% installed.packages(lib.loc = config[["R_lib_Path"]])[, "Package"])]
+#   if (length(new.pkg))
+#     install.packages(new.pkg, lib = config[["R_lib_Path"]], dependencies = TRUE, repos="http://cran.rstudio.com/")
+#   sapply(pkg, require, character.only = TRUE)
+# }
+# 
+# # usage
+# packages <- c("httpuv", "shiny")
+# ipak(packages)
+# 
+# 
+# 
+# 
 ### LOAD CONFIGS FOR WAVE-WIT APPS ####
 username <- Sys.getenv('USERNAME')
 userlogin <- username
 user_root <- paste0("C:/Users/",userlogin ,"/Commonwealth of Massachusetts/DCR-TEAMS-DWSPEQ - Documents/")
-wach_team_root <- paste0("C:/Users/",userlogin ,"/","Commonwealth of Massachusetts/DCR WSP - WaterQualityMonitoring/")
+wach_team_root <- glue('C:/Users/{username}/Commonwealth of Massachusetts/DCR WSP - WaterQualityMonitoring/')
+quab_team_root <- glue('C:/Users/{username}/Commonwealth of Massachusetts/DCR WSP - EQINSPEC/')
 config_path <- paste0(user_root,"Water Quality/R-Shared/Configs/WAVE_WIT_Config.csv")
 R_config <- read.csv(config_path, header = TRUE)
 config <- as.character(R_config$CONFIG_VALUE)
 config_names <- as.character(R_config$CONFIG_NAME)
 names(config) <- config_names
-
+userlocation <- "Wachusett" #Or use "Quabbin"
 
 # config 8 is wachusett datasets, config 9 is Quabbin config 11 is testing db
-datasets <-  paste0(wach_team_root, config[[8]])
+datasets <-  paste0(wach_team_root, config[["Wach Import Datasets"]])
+# datasets <-  paste0(quab_team_root, config[["Quab Import Datasets"]])
 datasets <- read_excel(datasets) %>% print()
 datasets$DataType
 # Pick the dataset for import
+dataset <- slice(datasets, 25)
+# Process Args
+# rawdatafolder <- paste0(quab_team_root, dataset[[11]])
+rawdatafolder <- paste0(wach_team_root, dataset[[11]])
+# List the available unprocessed files for importing
+files <- list.files(rawdatafolder, pattern = dataset[[14]])
+# Look at the files
+files
+
+# Choose the file to import
+file <- files[1]
+
+filename.db <- dataset[[6]]
+filename.db
+# probe <- "YSI_EXO2"
+# probe = NULL # This only used for Aq Bio stuff
+
+# Import Args
+ImportTable <- dataset[[7]]
+ImportFlagTable <-  dataset[[8]]
+processedfolder <- paste0(wach_team_root, dataset[[12]])
+# processedfolder <- paste0(quab_team_root, dataset[[12]])
+# Flag Args
+flag.db <- dataset[[6]]
+datatable <- dataset[[7]]
+flagtable <- dataset[[8]]
+
+# App settings
+username <- "Max Nyquist"
+
+
+
 dataset <- slice(datasets, 2)
 # Process Args
 rawdatafolder <- paste0(wach_team_root, dataset[[11]])
