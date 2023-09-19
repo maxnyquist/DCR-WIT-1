@@ -21,7 +21,6 @@
 #library(readxl)
 # library(testthat)
 # library(glue)
-# library(writexl)
 # COMMENT OUT ABOVE CODE WHEN RUNNING IN SHINY!
 
 #############################
@@ -110,13 +109,6 @@ PROCESS_DATA <- function(file, rawdatafolder, filename.db, probe = NULL, ImportT
   
   ##Remove Wachusett data
   df.wq <- df.wq %>% filter(!str_detect(Location,"^WACHUSET"))
-  
-  ##Separate and export MW data
-  df.mw <- df.wq %>% filter(str_detect(Location,"^MW-"))
-  exportpath <- "//env.govt.state.ma.us/enterprise/DCR-Quabbin-WKGRP/EQINSPEC/WQDatabase/data/wqDistributionSystemResults/staging/"
-  fullexportpath <- gsub(" ","",paste (exportpath,"MW_",file))
-  write_xlsx(df.mw, fullexportpath) 
-  df.wq <- df.wq %>% filter(!str_detect(Location,"^MW-"))
   
   # Any other checks?  Otherwise data is validated, proceed to reformatting...
   ###
@@ -303,28 +295,31 @@ Eliminate all duplicates before proceeding.",
   datemin <- min(df.wq$DateTimeET)
   datemax <- max(df.wq$DateTimeET)
   
-  # IDs to look for - all records in time period in question
-  qry <- glue("SELECT (ID) FROM [{schema}].[{ImportTable}] WHERE [DateTimeET] >= '{datemin}' AND [DateTimeET] <= '{datemax}'")
-  query.prelim <- dbGetQuery(con, qry) # This generates a list of possible IDs
+  ### BELOW NOT NEEDED - NO PRELIMINARY DATA
   
-  if (nrow(query.prelim) > 0) {# If true there is at least one record in the time range of the data
-    # SQL query that finds matching sample ID from tblSampleFlagIndex Flagged 102 within date range in question
-    qryS <- glue("SELECT [SampleID] FROM [{schema}].[{ImportFlagTable}] WHERE [FlagCode] = 102 AND [SampleID] IN ({paste0(query.prelim$ID, collapse = ",")})")
-    qryDelete <- dbGetQuery(con,qryS) # Check the query to see if it returns any matches
-    # If there are matching records then delete preliminary data (IDs flagged 102 in period of question)
-    if(nrow(qryDelete) > 0) {
-      qryDeletePrelimData <- glue("DELETE FROM [{schema}].[{ImportTable}] WHERE [DataTableName] = 'tblMWRAResults' AND [ID] IN ({paste0(qryDelete$SampleID, collapse = ",")})")
-      rs <- dbSendStatement(con,qryDeletePrelimData)
-      print(paste(dbGetRowsAffected(rs), "preliminary records were deleted during this import", sep = " ")) # Need to display this message to the Shiny UI
-      dbClearResult(rs)
-      
-      # Next delete all flags associated with preliminary data - Will also delete any other flag associated with record number
-      qryDeletePrelimFlags <- glue("DELETE FROM [{schema}].[{ImportFlagTable}] WHERE [DataTableName] = 'tblMWRAResults' AND [SampleID] IN ({paste0(qryDelete$SampleID, collapse = ",")})")
-      rs <- dbSendStatement(con, qryDeletePrelimFlags)
-      print(paste(dbGetRowsAffected(rs), "preliminary record data flags were deleted during this import", sep = " "))
-      dbClearResult(rs)
-    }
-  }
+  # # IDs to look for - all records in time period in question
+  # qry <- glue("SELECT (ID) FROM [{schema}].[{ImportTable}] WHERE [DateTimeET] >= '{datemin}' AND [DateTimeET] <= '{datemax}'")
+  # query.prelim <- dbGetQuery(con, qry) # This generates a list of possible IDs
+  # 
+  # if (nrow(query.prelim) > 0) {# If true there is at least one record in the time range of the data
+  #   # SQL query that finds matching sample ID from tblSampleFlagIndex Flagged 102 within date range in question
+  #   qryS <- glue("SELECT [SampleID] FROM [{schema}].[{ImportFlagTable}] WHERE [FlagCode] = 102 AND [SampleID] IN ({paste0(query.prelim$ID, collapse = ",")})")
+  #   qryS <- sprintf("SELECT [SampleID] FROM [Wachusett].[tblTribFlagIndex] WHERE [FlagCode] = 102 AND [SampleID] IN (%s)", paste(as.character(query.prelim), collapse=', '))
+  #   qryDelete <- dbGetQuery(con,qryS) # Check the query to see if it returns any matches
+  #   # If there are matching records then delete preliminary data (IDs flagged 102 in period of question)
+  #   if(nrow(qryDelete) > 0) {
+  #     qryDeletePrelimData <- glue("DELETE FROM [{schema}].[{ImportTable}] WHERE [DataTableName] = 'tblMWRAResults' AND [ID] IN ({paste0(qryDelete$SampleID, collapse = ",")})")
+  #     rs <- dbSendStatement(con,qryDeletePrelimData)
+  #     print(paste(dbGetRowsAffected(rs), "preliminary records were deleted during this import", sep = " ")) # Need to display this message to the Shiny UI
+  #     dbClearResult(rs)
+  #     
+  #     # Next delete all flags associated with preliminary data - Will also delete any other flag associated with record number
+  #     qryDeletePrelimFlags <- glue("DELETE FROM [{schema}].[{ImportFlagTable}] WHERE [DataTableName] = 'tblMWRAResults' AND [SampleID] IN ({paste0(qryDelete$SampleID, collapse = ",")})")
+  #     rs <- dbSendStatement(con, qryDeletePrelimFlags)
+  #     print(paste(dbGetRowsAffected(rs), "preliminary record data flags were deleted during this import", sep = " "))
+  #     dbClearResult(rs)
+  #   }
+  # }
   
   
   ########################################################################.
