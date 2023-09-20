@@ -42,7 +42,7 @@ sheetNum <- as.numeric(length(excel_sheets(path)))
 # Assign the sheet name
 sheetName <- excel_sheets(path)[sheetNum]
 # Read in the raw data - defaults to the last sheet added
-df.wq <- read_excel(path, sheet = sheetNum, range = cell_cols("AN:BB"),  col_names = F, trim_ws = T, na = "nil") %>%
+df.wq <- read_excel(path, sheet = sheetNum, range = cell_cols("Z:AN"),  col_names = F, trim_ws = T, na = "nil") %>%
                     as.data.frame()   # This is the raw data - data comes in as xlsx file, so read.csv will not work
 
 # Scan row 9 (Effort) for values, then reduce vector where effort is 0 or NA - these are column #s we want to remove
@@ -115,7 +115,7 @@ tz <- 'America/New_York'
 con <- dbConnect(odbc::odbc(), dsn = dsn, uid = dsn, pwd = config[35], timezone = tz)
 # 
 # Get Taxa Table and check to make sure taxa in df.wq are in the Taxa Table - if not warn and exit
-df_taxa_wach <- dbReadTable(con, Id(schema = schema, table = "tbl_PhytoTaxa"))
+df_taxa_wach <- dbReadTable(con, Id(schema = schema, table = "tbl_ZooTaxa"))
 unmatchedTaxa <- which(is.na(df_taxa_wach$ID[match(df.wq$taxa, df_taxa_wach$Phyto_Name)]))
 
 if (length(unmatchedTaxa) > 0){
